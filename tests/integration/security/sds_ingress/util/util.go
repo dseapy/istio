@@ -57,9 +57,10 @@ const (
 )
 
 type IngressCredential struct {
-	PrivateKey string
-	ServerCert string
-	CaCert     string
+	PrivateKey                string
+	ServerCert                string
+	CaCert                    string
+	CertificateRevocationList string
 }
 
 var IngressCredentialA = IngressCredential{
@@ -71,6 +72,12 @@ var IngressCredentialB = IngressCredential{
 	PrivateKey: TLSServerKeyB,
 	ServerCert: TLSServerCertB,
 	CaCert:     CaCertB,
+}
+var IngressCredentialC = IngressCredential{
+	PrivateKey:                TLSServerKeyC,
+	ServerCert:                TLSServerCertC,
+	CaCert:                    CaCertC,
+	CertificateRevocationList: CertificateRevocationListC,
 }
 
 // CreateIngressKubeSecret reads credential names from credNames and key/cert from ingressCred,
