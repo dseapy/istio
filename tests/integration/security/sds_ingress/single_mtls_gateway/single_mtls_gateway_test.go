@@ -105,5 +105,41 @@ func TestSingleMTLSGateway_SecretRotation(t *testing.T) {
 			if err != nil {
 				t.Errorf("unable to retrieve 200 from product page at host %s: %v", host, err)
 			}
+
+			// add a certificate revocation list (CRL) that revokes the client certificate
+			ingressutil.RotateSecrets(t, ctx, credName, ingress.Mtls, ingressutil.IngressCredentialCWithCRL)
+			ingD := ingress.NewOrFail(t, ctx, ingress.Config{Istio: inst})
+			// Expect 2 SDS updates, one for the server key/cert update, and one for the CA/CRL update.
+			err = ingressutil.WaitUntilGatewaySdsStatsGE(t, ingD, 2, 10*time.Second)
+			if err != nil {
+				t.Errorf("sds update stats does not match: %v", err)
+			}
+			// Use server CA and revoked client certificate to set up SSL connection.
+			tlsContextC := ingressutil.TLSContext{
+				CaCert:     ingressutil.CaCertA,
+				PrivateKey: ingressutil.TLSClientKeyC,
+				Cert:       ingressutil.TLSClientCertC,
+			}
+			err = ingressutil.VisitProductPage(ingD, host, ingress.Mtls, tlsContextC, 30*time.Second,
+				ingressutil.ExpectedResponse{ResponseCode: 0, ErrorMessage: ""}, t)
+			if err != nil {
+				t.Errorf("unable to retrieve 404 from product page at host %s: %v", host, err)
+			}
+
+			// remove the certificate revocation list (CRL) that was revoking the client certificate
+			ingressutil.RotateSecrets(t, ctx, credName, ingress.Mtls, ingressutil.IngressCredentialCWithoutCRL)
+			ingE := ingress.NewOrFail(t, ctx, ingress.Config{Istio: inst})
+			// Expect 2 SDS updates, one for the server key/cert update, and one for the CA/CRL update.
+			err = ingressutil.WaitUntilGatewaySdsStatsGE(t, ingE, 2, 10*time.Second)
+			if err != nil {
+				t.Errorf("sds update stats does not match: %v", err)
+			}
+			// Use server CA and client certificate again now that the revoking CRL is not in place to set up SSL connection.
+			err = ingressutil.VisitProductPage(ingE, host, ingress.Mtls, tlsContextC, 30*time.Second,
+				ingressutil.ExpectedResponse{ResponseCode: 200, ErrorMessage: ""}, t)
+			if err != nil {
+				t.Errorf("unable to retrieve 200 from product page at host %s: %v", host, err)
+			}
+
 		})
 }

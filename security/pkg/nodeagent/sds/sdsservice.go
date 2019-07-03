@@ -475,6 +475,11 @@ func pushSDS(con *sdsConnection) error {
 			string(secret.RootCert))
 		sdsMetrics.rootCertExpiryTimestamp.WithLabelValues(metricLabelName).Set(
 			float64(secret.ExpireTime.Unix()))
+		if secret.CertificateRevocationList != nil {
+			sdsServiceLog.Infof("%s pushed certificate revocation list (CRL) to proxy\n", conIDresourceNamePrefix)
+			sdsServiceLog.Debugf("%s pushed certificate revocation list (CRL) %+v to proxy\n", conIDresourceNamePrefix,
+				string(secret.CertificateRevocationList))
+		}
 	} else {
 		sdsServiceLog.Infof("%s pushed key/cert pair to proxy\n", conIDresourceNamePrefix)
 		sdsServiceLog.Debugf("%s pushed certificate chain %+v to proxy\n",
@@ -504,14 +509,22 @@ func sdsDiscoveryResponse(s *model.SecretItem, conID, resourceName string) (*xds
 		Name: s.ResourceName,
 	}
 	if s.RootCert != nil {
-		secret.Type = &authapi.Secret_ValidationContext{
-			ValidationContext: &authapi.CertificateValidationContext{
-				TrustedCa: &core.DataSource{
-					Specifier: &core.DataSource_InlineBytes{
-						InlineBytes: s.RootCert,
-					},
+		validationContext := &authapi.CertificateValidationContext{
+			TrustedCa: &core.DataSource{
+				Specifier: &core.DataSource_InlineBytes{
+					InlineBytes: s.RootCert,
 				},
 			},
+		}
+		if s.CertificateRevocationList != nil {
+			validationContext.Crl = &core.DataSource{
+				Specifier: &core.DataSource_InlineBytes{
+					InlineBytes: s.CertificateRevocationList,
+				},
+			}
+		}
+		secret.Type = &authapi.Secret_ValidationContext{
+			ValidationContext: validationContext,
 		}
 	} else {
 		secret.Type = &authapi.Secret_TlsCertificate{
